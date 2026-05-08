@@ -1,0 +1,26 @@
+{
+  "entities": {
+    "Report": {
+      "title": "Calibration Report",
+      "description": "Consolidated calibration report with company and instrument details.",
+      "type": "object",
+      "properties": {
+        "companyName": { "type": "string" },
+        "companyEmail": { "type": "string", "format": "email" },
+        "contactPerson": { "type": "string" },
+        "instrumentList": { "type": "string", "description": "Comma separated or list of instruments" },
+        "calibrationDate": { "type": "string", "format": "date-time" },
+        "expiryDate": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" },
+        "remindersSent": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["companyName", "companyEmail", "instrumentList", "calibrationDate", "expiryDate", "userId"]
+    }
+  },
+  "firestore": {
+    "reports": {
+      "schema": "Report",
+      "description": "Collection of all calibration reports."
+    }
+  }
+}
