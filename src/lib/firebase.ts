@@ -5,34 +5,41 @@ import localConfig from '@/firebase-applet-config.json';
 
 /**
  * Firebase Config Sourcing Logic:
- * 1. Check if VITE_FIREBASE_API_KEY is present and not a placeholder.
- * 2. If present, use environment variables for EVERYTHING (to ensure consistency).
- * 3. If absent, fallback to the local firebase-applet-config.json.
+ * 1. Prioritize environment variables (VITE_ prefixed).
+ * 2. Fallback to localConfig for any missing values.
+ * 3. Treat placeholders as "missing".
  */
 
-const envKey = import.meta.env.VITE_FIREBASE_API_KEY;
-const isEnvActive = typeof envKey === 'string' && envKey.trim() !== '' && !['undefined', 'null', '""', "''"].includes(envKey.trim());
+const isPlaceholder = (val: string | undefined) => 
+  !val || ['undefined', 'null', '""', "''", 'PLACEHOLDER', 'REPLACE_ME'].includes(val.trim());
 
-const firebaseConfig = isEnvActive ? {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
-  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID,
-} : localConfig;
+const getFirebaseValue = (envKey: string, configValue: string | undefined): string => {
+  const envValue = import.meta.env[envKey];
+  if (typeof envValue === 'string' && !isPlaceholder(envValue)) {
+    return envValue.trim();
+  }
+  return configValue || '';
+};
+
+const firebaseConfig = {
+  apiKey: getFirebaseValue('VITE_FIREBASE_API_KEY', localConfig.apiKey),
+  authDomain: getFirebaseValue('VITE_FIREBASE_AUTH_DOMAIN', localConfig.authDomain),
+  projectId: getFirebaseValue('VITE_FIREBASE_PROJECT_ID', localConfig.projectId),
+  storageBucket: getFirebaseValue('VITE_FIREBASE_STORAGE_BUCKET', localConfig.storageBucket),
+  messagingSenderId: getFirebaseValue('VITE_FIREBASE_MESSAGING_SENDER_ID', localConfig.messagingSenderId),
+  appId: getFirebaseValue('VITE_FIREBASE_APP_ID', localConfig.appId),
+  measurementId: getFirebaseValue('VITE_FIREBASE_MEASUREMENT_ID', localConfig.measurementId),
+  firestoreDatabaseId: getFirebaseValue('VITE_FIREBASE_DATABASE_ID', localConfig.firestoreDatabaseId),
+};
 
 // Diagnostic Logging
 if (process.env.NODE_ENV !== 'production') {
   console.group('Firebase Configuration');
-  console.log(`Source: ${isEnvActive ? 'Environment Variables' : 'local-config.json'}`);
   console.log(`Project: ${firebaseConfig.projectId}`);
-  if (firebaseConfig.apiKey) {
-    console.log(`Key: ${firebaseConfig.apiKey.substring(0, 6)}...${firebaseConfig.apiKey.substring(firebaseConfig.apiKey.length - 4)}`);
+  if (!isPlaceholder(firebaseConfig.apiKey)) {
+    console.log(`API Key: ${firebaseConfig.apiKey.substring(0, 6)}...${firebaseConfig.apiKey.substring(firebaseConfig.apiKey.length - 4)}`);
   } else {
-    console.warn('API Key is missing!');
+    console.warn('API Key is missing or placeholder!');
   }
   console.groupEnd();
 }
