@@ -3,45 +3,42 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import localConfig from '@/firebase-applet-config.json';
 
-// Helper to safely get environment variables or fallback
-const getEnv = (key: string, fallback: string | undefined): string => {
-  const value = import.meta.env[key];
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (trimmed !== '' && trimmed !== '""' && trimmed !== "''" && trimmed !== 'undefined' && trimmed !== 'null') {
-      return trimmed;
-    }
-  }
-  return fallback || '';
-};
+/**
+ * Firebase Config Sourcing Logic:
+ * 1. Check if VITE_FIREBASE_API_KEY is present and not a placeholder.
+ * 2. If present, use environment variables for EVERYTHING (to ensure consistency).
+ * 3. If absent, fallback to the local firebase-applet-config.json.
+ */
 
-const firebaseConfig = {
-  apiKey: getEnv('VITE_FIREBASE_API_KEY', localConfig.apiKey),
-  authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN', localConfig.authDomain),
-  projectId: getEnv('VITE_FIREBASE_PROJECT_ID', localConfig.projectId),
-  storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET', localConfig.storageBucket),
-  messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID', localConfig.messagingSenderId),
-  appId: getEnv('VITE_FIREBASE_APP_ID', localConfig.appId),
-  measurementId: getEnv('VITE_FIREBASE_MEASUREMENT_ID', localConfig.measurementId),
-  firestoreDatabaseId: getEnv('VITE_FIREBASE_DATABASE_ID', localConfig.firestoreDatabaseId),
-};
+const envKey = import.meta.env.VITE_FIREBASE_API_KEY;
+const isEnvActive = typeof envKey === 'string' && envKey.trim() !== '' && !['undefined', 'null', '""', "''"].includes(envKey.trim());
 
-// Diagnostic Logging (Safe)
+const firebaseConfig = isEnvActive ? {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID,
+} : localConfig;
+
+// Diagnostic Logging
 if (process.env.NODE_ENV !== 'production') {
-  console.log('[Firebase Diagnostics]');
-  console.log(`- Project ID: ${firebaseConfig.projectId}`);
-  console.log(`- Auth Domain: ${firebaseConfig.authDomain}`);
+  console.group('Firebase Configuration');
+  console.log(`Source: ${isEnvActive ? 'Environment Variables' : 'local-config.json'}`);
+  console.log(`Project: ${firebaseConfig.projectId}`);
   if (firebaseConfig.apiKey) {
-    const isEnv = !!import.meta.env.VITE_FIREBASE_API_KEY;
-    console.log(`- API Key Source: ${isEnv ? 'Environment (VITE_FIREBASE_API_KEY)' : 'firebase-applet-config.json'}`);
-    console.log(`- API Key (Redacted): ${firebaseConfig.apiKey.substring(0, 6)}...${firebaseConfig.apiKey.substring(firebaseConfig.apiKey.length - 4)}`);
+    console.log(`Key: ${firebaseConfig.apiKey.substring(0, 6)}...${firebaseConfig.apiKey.substring(firebaseConfig.apiKey.length - 4)}`);
   } else {
-    console.error('- API Key: MISSING');
+    console.warn('API Key is missing!');
   }
+  console.groupEnd();
 }
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 
 // --- Error Handling Guidelines Implementation ---
