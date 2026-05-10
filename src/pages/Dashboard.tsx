@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../lib/firebase';
-import { doc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { 
-  AlertTriangle, 
+  AlertCircle, 
   CheckCircle2, 
   Clock, 
-  ArrowUpRight,
-  Send,
-  Building2,
-  Calendar
+  Sparkles,
+  Calendar,
+  ChevronRight,
+  ShieldCheck,
+  History
 } from 'lucide-react';
 import { format, addDays, isBefore, differenceInDays } from 'date-fns';
 import { Report } from '../types';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -71,173 +72,120 @@ export default function Dashboard() {
     setIsLoading(false);
   }
 
-  const handleSendReminders = async () => {
-    if (isLoading || stats.expiring7d + stats.expiring3d === 0) {
-      alert('No reports are currently due for reminders (7 or 3 days).');
-      return;
-    }
+  const elapsedRecords = allReports.filter(r => {
+    const days = differenceInDays(r.expiryDate.toDate(), new Date());
+    return days < 0;
+  });
 
-    try {
-      setIsLoading(true);
-      const now = new Date();
-      const next7d = addDays(now, 7);
-      const next3d = addDays(now, 3);
-
-      const toNotify: { id: string; email: string; company: string; instruments: string; type: string; tag: string }[] = [];
-
-      allReports.forEach(r => {
-        const expiry = r.expiryDate.toDate();
-        const sent = r.remindersSent || [];
-
-        if (isBefore(expiry, now)) {
-          // Record is expired
-          if (!sent.includes('expired')) {
-            toNotify.push({ id: r.id!, email: r.companyEmail, company: r.companyName, instruments: r.instrumentList, type: 'OVERDUE', tag: 'expired' });
-          }
-        } else if (isBefore(expiry, next3d)) {
-          // Due in 3 days
-          if (!sent.includes('3d')) {
-            toNotify.push({ id: r.id!, email: r.companyEmail, company: r.companyName, instruments: r.instrumentList, type: 'DUE IN 3 DAYS', tag: '3d' });
-          }
-        } else if (isBefore(expiry, next7d)) {
-          // Due in 7 days
-          if (!sent.includes('7d')) {
-            toNotify.push({ id: r.id!, email: r.companyEmail, company: r.companyName, instruments: r.instrumentList, type: 'DUE IN 7 DAYS', tag: '7d' });
-          }
-        }
-      });
-
-      if (toNotify.length === 0) {
-        alert('No unsent reminders found for today. (Reminders are only sent once for each milestone)');
-        setIsLoading(false);
-        return;
-      }
-
-      const response = await fetch('/api/reminders/check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          recipients: [...new Set(toNotify.map(n => n.email))],
-          subject: 'URGENT: Calibration Status Update',
-          body: `
-            <div style="font-family: sans-serif; padding: 20px; background: #f4f4f4;">
-              <h1 style="color: #141414;">Instrument Calibration Alert</h1>
-              <p>The following instruments require your immediate attention:</p>
-              <ul style="list-style: none; padding: 0;">
-                ${toNotify.map(n => `<li style="padding: 15px; background: white; margin-bottom: 10px; border-left: 4px solid #141414; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                  <div style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">${n.company}</div>
-                  <div style="color: #666; font-size: 14px;">Instruments: ${n.instruments}</div>
-                  <div style="color: #ef4444; font-weight: bold; margin-top: 5px;">STATUS: ${n.type}</div>
-                </li>`).join('')}
-              </ul>
-              <p>Please schedule a recalibration session as soon as possible.</p>
-            </div>
-          `
-        })
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        // Update Firestore so we don't send these again
-        await Promise.all(toNotify.map(item => {
-          const report = allReports.find(ar => ar.id === item.id);
-          const newSent = [...(report?.remindersSent || []), item.tag];
-          return updateDoc(doc(db, 'reports', item.id), { remindersSent: newSent });
-        }));
-        
-        alert(`Successfully dispatched emails for ${toNotify.length} reports.`);
-        loadData(); // Refresh local state
-      } else {
-        throw new Error(result.error);
-      }
-    } catch (error: any) {
-      alert(`Alert Error: ${error.message === 'RESEND_API_KEY not configured' ? 'RESEND_API_KEY missing in Secrets.' : 'Check logs.'}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const statCards = [
-    { label: 'Active Fleet', value: stats.active, icon: CheckCircle2, color: 'text-green-600' },
-    { label: 'Due in 7 Days', value: stats.expiring7d, icon: Clock, color: 'text-amber-500' },
-    { label: 'Due in 3 Days', value: stats.expiring3d, icon: AlertTriangle, color: 'text-orange-600' },
-    { label: 'Expired Records', value: stats.expired, icon: AlertTriangle, color: 'text-red-600' },
-  ];
-
-  if (isLoading && allReports.length === 0) return <div className="p-8 animate-pulse text-xs font-mono">LOADING SYSTEM REGISTRY...</div>;
+  if (isLoading && allReports.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <motion.div 
+          animate={{ rotate: 360 }} 
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          className="w-6 h-6 border-2 border-[#111111] border-t-transparent rounded-full"
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-12">
-      <section>
-        <div className="flex justify-between items-end mb-8">
-          <div>
-            <h2 className="text-4xl font-black uppercase tracking-tighter">Fleet Overview</h2>
-            <p className="text-sm italic opacity-50 font-serif">Consolidated calibration cycle metrics</p>
-          </div>
-          <button 
-            onClick={handleSendReminders}
-            disabled={isLoading}
-            className="flex items-center gap-2 bg-[#141414] text-[#E4E3E0] px-6 py-3 text-xs font-bold uppercase tracking-wider hover:invert hover:scale-105 transition-all disabled:opacity-50"
-          >
-            <Send className="w-3 h-3" />
-            Dispatch Due Alerts
-          </button>
+    <div className="max-w-6xl mx-auto space-y-16 py-8">
+      <header className="space-y-2">
+        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#111111]/40">
+          <Sparkles className="w-3 h-3" />
+          Dashboard v2.0
         </div>
+        <h1 className="text-5xl font-extrabold tracking-tight text-[#111111]">
+          Overview
+        </h1>
+        <p className="text-sm font-medium text-[#111111]/50 max-w-xl leading-relaxed">
+          Quick summary of your registered reports and status updates.
+        </p>
+      </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {statCards.map((stat, i) => (
-            <motion.div
-              key={stat.label}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1 }}
-              className="bg-white border border-[#141414] p-8 shadow-[8px_8px_0px_0px_#141414] active:translate-y-1 active:shadow-none transition-all"
-            >
-              <stat.icon className={`w-6 h-6 mb-4 ${stat.color}`} />
-              <p className="text-4xl font-mono font-bold leading-none mb-1">{stat.value}</p>
-              <p className="text-[10px] font-mono uppercase tracking-widest opacity-50">{stat.label}</p>
-            </motion.div>
-          ))}
-        </div>
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {[
+          { label: 'Registered Reports', value: allReports.length, icon: ShieldCheck, color: 'bg-blue-50 text-blue-600' },
+          { label: 'Elapsed Reports', value: elapsedRecords.length, icon: AlertCircle, color: 'bg-red-50 text-red-600' },
+          { label: 'Active Reports', value: stats.active, icon: CheckCircle2, color: 'bg-green-50 text-green-600' },
+        ].map((stat, i) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.1 }}
+            className="p-8 premium-card hover:-translate-y-1"
+          >
+            <div className={`w-10 h-10 ${stat.color} rounded-xl flex items-center justify-center mb-6`}>
+              <stat.icon className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-4xl font-bold tracking-tight">{stat.value}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#111111]/40">{stat.label}</p>
+            </div>
+          </motion.div>
+        ))}
       </section>
 
-      <section>
-        <h3 className="text-xl font-bold uppercase mb-6 flex items-center gap-2">
-          <Calendar className="w-5 h-5" />
-          Calibration Timeline
-        </h3>
-        <div className="border border-[#141414] bg-white overflow-hidden">
-          <table className="w-full text-left">
-            <thead className="bg-[#141414]/5">
-              <tr className="border-bottom border-[#141414]">
-                <th className="p-4 text-[10px] font-mono uppercase opacity-50">Client</th>
-                <th className="p-4 text-[10px] font-mono uppercase opacity-50">Instruments</th>
-                <th className="p-4 text-[10px] font-mono uppercase opacity-50">Expiry Date</th>
-                <th className="p-4 text-[10px] font-mono uppercase opacity-50">Recalibration Due In</th>
-              </tr>
-            </thead>
-            <tbody className="font-mono text-xs">
-              {allReports.map(report => {
-                const daysLeft = differenceInDays(report.expiryDate.toDate(), new Date());
+      <AnimatePresence>
+        {elapsedRecords.length > 0 && (
+          <motion.section 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-6"
+          >
+            <div className="flex items-center justify-between border-b border-[#111111]/5 pb-4">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-[#111111]/60 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-500" />
+                Elapsed Reports
+              </h3>
+              <span className="text-[10px] font-bold text-red-600 uppercase">
+                Attention Required
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {elapsedRecords.map((record, i) => {
+                const days = Math.abs(differenceInDays(record.expiryDate.toDate(), new Date()));
                 return (
-                  <tr key={report.id} className="border-bottom border-[#141414]/10 hover:bg-[#141414]/5 transition-colors">
-                    <td className="p-4 font-bold uppercase">{report.companyName}</td>
-                    <td className="p-4 opacity-70 truncate max-w-[300px]">{report.instrumentList}</td>
-                    <td className="p-4">{format(report.expiryDate.toDate(), 'dd MMM yyyy')}</td>
-                    <td className="p-4">
-                      <div className={`px-3 py-1 inline-block font-bold
-                        ${daysLeft < 0 ? 'bg-red-500 text-white' : daysLeft < 7 ? 'bg-orange-500 text-white' : 'bg-[#141414]/5 text-[#141414]'}
-                      `}>
-                        {daysLeft < 0 ? 'OVERDUE' : `${daysLeft} DAYS`}
+                  <motion.div
+                    key={record.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.1 }}
+                    className="p-6 premium-card flex items-start gap-4 border-red-100 bg-red-50/5"
+                  >
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-red-100 text-red-600">
+                      <Clock className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between mb-1">
+                        <h4 className="font-bold text-sm truncate uppercase tracking-tight">{record.companyName}</h4>
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded uppercase bg-red-600 text-white">
+                          {days}D OVERDUE
+                        </span>
                       </div>
-                    </td>
-                  </tr>
+                      <p className="text-[10px] text-[#111111]/50 font-mono mb-3">Tag: {record.tagId}</p>
+                      <div className="text-[10px] text-[#111111]/70 line-clamp-1 italic">
+                        {record.notes || 'No notes provided'}
+                      </div>
+                    </div>
+                  </motion.div>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      </section>
+            </div>
+          </motion.section>
+        )}
+      </AnimatePresence>
+
+      {elapsedRecords.length === 0 && !isLoading && (
+        <section className="py-20 text-center premium-card rounded-3xl border-dashed">
+          <CheckCircle2 className="w-12 h-12 text-green-500/20 mx-auto mb-4" />
+          <h3 className="text-sm font-bold uppercase tracking-widest text-[#111111]/40">All reports are current</h3>
+          <p className="text-[11px] text-[#111111]/30 mt-2">No elapsed reports detected in the registry.</p>
+        </section>
+      )}
     </div>
   );
 }

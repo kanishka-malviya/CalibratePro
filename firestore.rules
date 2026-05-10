@@ -22,14 +22,13 @@ service cloud.firestore {
     }
 
     function isValidReport(data) {
-      return data.keys().hasAll(['companyName', 'companyEmail', 'instrumentList', 'calibrationDate', 'expiryDate', 'userId']) &&
+      return data.keys().hasAll(['companyName', 'tagId', 'notes', 'calibrationDate', 'expiryDate', 'userId']) &&
              data.companyName is string && data.companyName.size() > 0 &&
-             data.companyEmail is string &&
-             data.instrumentList is string &&
+             data.tagId is string &&
+             data.notes is string &&
              data.calibrationDate is timestamp &&
              data.expiryDate is timestamp &&
              data.userId == request.auth.uid &&
-             (data.get('contactPerson', '') is string) &&
              (data.get('remindersSent', []) is list);
     }
 

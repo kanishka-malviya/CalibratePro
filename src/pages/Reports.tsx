@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../lib/firebase';
 import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc, Timestamp, orderBy } from 'firebase/firestore';
-import { ClipboardCheck, Plus, Trash2, Edit3, X, Save, Building2, Microscope, User, Mail } from 'lucide-react';
+import { ClipboardCheck, Plus, Trash2, Edit3, X, Save, Building, Microscope, User, Mail, Search } from 'lucide-react';
 import { Report } from '../types';
 import { format, differenceInDays } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
@@ -36,12 +36,12 @@ export default function Reports() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   
   const [formData, setFormData] = useState({
     companyName: '',
-    companyEmail: '',
-    contactPerson: '',
-    instrumentList: '',
+    tagId: '',
+    notes: '',
     calibrationDate: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
     expiryDate: format(new Date(), "yyyy-MM-dd'T'HH:mm")
   });
@@ -70,14 +70,15 @@ export default function Reports() {
 
     const payload = {
       ...formData,
+      notes: formData.notes || '',
       calibrationDate: Timestamp.fromDate(isNaN(calDate.getTime()) ? new Date() : calDate),
       expiryDate: Timestamp.fromDate(isNaN(expDate.getTime()) ? new Date() : expDate),
-      userId: auth.currentUser.uid
+      userId: auth.currentUser.uid,
+      remindersSent: editingReport?.remindersSent || []
     };
 
     try {
       setErrorMessage(null);
-      const reportPath = editingReport?.id ? `reports/${editingReport.id}` : 'reports';
       if (editingReport?.id) {
         await updateDoc(doc(db, 'reports', editingReport.id), payload);
       } else {
@@ -86,14 +87,13 @@ export default function Reports() {
       setIsModalOpen(false);
       loadData();
     } catch (error: any) {
-      // For UI display, we can be slightly friendlier but still log the JSON
-      setErrorMessage(error.message.includes('{') ? 'Insufficient Permissions / Invalid Data' : error.message);
+      setErrorMessage(error.message.includes('{') ? 'Authorization Failure or Invalid Schema' : error.message);
       handleFirestoreError(error, OperationType.WRITE, editingReport?.id ? `reports/${editingReport.id}` : 'reports');
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Delete this report record?')) {
+    if (confirm('Permanently delete this record?')) {
       try {
         await deleteDoc(doc(db, 'reports', id));
         loadData();
@@ -103,110 +103,119 @@ export default function Reports() {
     }
   };
 
+  const filteredReports = reports.filter(r => 
+    r.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.tagId.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
-    <div className="space-y-8">
-      <div className="flex justify-between items-end">
-        <div>
-          <h2 className="text-4xl font-black uppercase tracking-tighter">Calibration Records</h2>
-          <p className="text-sm italic opacity-50 font-serif">Comprehensive certificate management</p>
+    <div className="max-w-6xl mx-auto space-y-12 py-8">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#111111]/40">
+            <ClipboardCheck className="w-3 h-3" />
+            Registry
+          </div>
+          <h2 className="text-4xl font-extrabold tracking-tight">Reports Log</h2>
+          <p className="text-sm font-medium text-[#111111]/50 italic">Manage and track your calibration records.</p>
         </div>
-        <button 
-          onClick={() => {
-            setEditingReport(null);
-            setErrorMessage(null);
-            setFormData({
-              companyName: '',
-              companyEmail: '',
-              contactPerson: '',
-              instrumentList: '',
-              calibrationDate: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-              expiryDate: format(new Date(), "yyyy-MM-dd'T'HH:mm")
-            });
-            setIsModalOpen(true);
-          }}
-          className="flex items-center gap-2 bg-[#141414] text-[#E4E3E0] px-6 py-3 text-xs font-bold uppercase tracking-wider hover:invert transition-all"
-        >
-          <Plus className="w-3 h-3" />
-          Create New Report
-        </button>
+        
+        <div className="flex items-center gap-3">
+          <div className="relative group">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#111111]/30 group-focus-within:text-[#111111] transition-colors" />
+            <input 
+              type="text"
+              placeholder="Search reports..."
+              className="bg-white border border-[#111111]/10 rounded-full px-10 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#111111]/20 w-[200px] transition-all"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <button 
+            onClick={() => {
+              setEditingReport(null);
+              setErrorMessage(null);
+              setFormData({
+                companyName: '',
+                tagId: '',
+                notes: '',
+                calibrationDate: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
+                expiryDate: format(new Date(), "yyyy-MM-dd'T'HH:mm")
+              });
+              setIsModalOpen(true);
+            }}
+            className="flex items-center gap-2 bg-[#111111] text-white px-6 py-3 rounded-full text-[11px] font-bold uppercase tracking-wider hover:bg-[#222222] transition-all"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Report
+          </button>
+        </div>
       </div>
 
-      <div className="border border-[#141414] bg-white overflow-hidden shadow-[8px_8px_0px_0px_#141414]">
-        <table className="w-full text-left">
-          <thead className="bg-[#141414] text-[#E4E3E0]">
-            <tr>
-              <th className="p-4 text-[10px] uppercase font-mono tracking-widest">Company & Contact</th>
-              <th className="p-4 text-[10px] uppercase font-mono tracking-widest">Instruments</th>
-              <th className="p-4 text-[10px] uppercase font-mono tracking-widest">Calibration Details</th>
-              <th className="p-4 text-[10px] uppercase font-mono tracking-widest">Due In</th>
-              <th className="p-4 text-[10px] uppercase font-mono tracking-widest text-right">Actions</th>
+      <div className="premium-card rounded-2xl overflow-hidden border-[#111111]/5">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-[#111111]/[0.02] text-[10px] font-bold uppercase tracking-widest text-[#111111]/40 border-b border-[#111111]/5">
+              <th className="px-8 py-5">Company</th>
+              <th className="px-8 py-5">Tag / ID</th>
+              <th className="px-8 py-5">Validity Period</th>
+              <th className="px-8 py-5">Status</th>
+              <th className="px-8 py-5 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#141414]/10">
+          <tbody className="divide-y divide-[#111111]/5">
             {isLoading ? (
-              [1, 2, 3].map(i => <tr key={i} className="animate-pulse h-16 bg-[#141414]/5"></tr>)
-            ) : reports.map((report) => {
+              [1, 2, 3, 4].map(i => <tr key={i} className="animate-pulse h-24 bg-[#111111]/[0.01]"></tr>)
+            ) : filteredReports.map((report) => {
               const daysLeft = differenceInDays(report.expiryDate.toDate(), new Date());
               return (
-                <tr key={report.id} className="hover:bg-[#141414]/5 transition-colors group">
-                  <td className="p-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-tight">
-                        <Building2 className="w-3 h-3 opacity-30" />
-                        {report.companyName}
-                      </div>
-                      <div className="flex items-center gap-2 text-[10px] opacity-60">
-                        <User className="w-2.5 h-2.5" />
-                        {report.contactPerson || 'No Contact'}
-                      </div>
-                      <div className="flex items-center gap-2 text-[10px] opacity-60 italic">
-                        <Mail className="w-2.5 h-2.5" />
-                        {report.companyEmail}
-                      </div>
-                    </div>
+                <tr key={report.id} className="hover:bg-[#FBFBFA] transition-colors group">
+                  <td className="px-8 py-6">
+                    <div className="text-xs font-bold uppercase tracking-tight text-[#111111]">{report.companyName}</div>
+                    <div className="text-[10px] text-[#111111]/40 mt-1 font-medium italic truncate max-w-[200px]" title={report.notes}>{report.notes || 'No notes'}</div>
                   </td>
-                  <td className="p-4">
-                    <div className="flex items-start gap-2">
-                       <Microscope className="w-3 h-3 mt-1 opacity-30" />
-                       <span className="text-xs font-mono uppercase leading-relaxed max-w-[200px] block truncate" title={report.instrumentList}>
-                         {report.instrumentList}
+                  <td className="px-8 py-6">
+                    <div className="flex items-center gap-2">
+                       <span className="text-[11px] font-mono font-bold uppercase text-[#111111]/70">
+                         {report.tagId}
                        </span>
                     </div>
                   </td>
-                  <td className="p-4 space-y-1">
-                    <p className="text-[10px] font-mono opacity-50 uppercase">Issued: {format(report.calibrationDate.toDate(), 'dd MMM yy')}</p>
-                    <p className="text-[10px] font-mono font-bold uppercase">Expires: {format(report.expiryDate.toDate(), 'dd MMM yy')}</p>
-                  </td>
-                  <td className="p-4">
-                    <div className={`text-xs font-bold uppercase px-2 py-1 inline-block ${daysLeft < 0 ? 'bg-red-100 text-red-600' : daysLeft < 7 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
-                      {daysLeft < 0 ? 'EXPIRED' : `${daysLeft} DAYS`}
+                  <td className="px-8 py-6">
+                    <div className="space-y-1 font-mono">
+                      <div className="text-[9px] text-[#111111]/30 uppercase font-bold">CAL: {format(report.calibrationDate.toDate(), 'dd/MM/yy')}</div>
+                      <div className="text-[10px] text-[#111111] font-bold">DUE: {format(report.expiryDate.toDate(), 'dd/MM/yy')}</div>
                     </div>
                   </td>
-                  <td className="p-4 text-right">
-                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <td className="px-8 py-6">
+                    <div className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded inline-block tracking-tighter ${daysLeft < 0 ? 'bg-red-50 text-red-600' : daysLeft < 7 ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-green-700'}`}>
+                      {daysLeft < 0 ? 'ELAPSED' : `${daysLeft} DAYS LEFT`}
+                    </div>
+                  </td>
+                  <td className="px-8 py-6 text-right">
+                    <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button 
                         onClick={() => {
                           setEditingReport(report);
                           setErrorMessage(null);
                           setFormData({
                             companyName: report.companyName,
-                            companyEmail: report.companyEmail,
-                            contactPerson: report.contactPerson || '',
-                            instrumentList: report.instrumentList,
+                            tagId: report.tagId,
+                            notes: report.notes || '',
                             calibrationDate: format(report.calibrationDate.toDate(), "yyyy-MM-dd'T'HH:mm"),
                             expiryDate: format(report.expiryDate.toDate(), "yyyy-MM-dd'T'HH:mm")
                           });
                           setIsModalOpen(true);
                         }}
-                        className="p-1 hover:bg-[#141414] hover:text-[#E4E3E0] transition-all"
+                        className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#111111] hover:text-white transition-all duration-300"
                       >
-                        <Edit3 className="w-3 h-3" />
+                        <Edit3 className="w-3.5 h-3.5" />
                       </button>
                       <button 
                         onClick={() => report.id && handleDelete(report.id)}
-                        className="p-1 hover:bg-red-500 hover:text-[#E4E3E0] transition-all"
+                        className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-red-600 hover:text-white transition-all duration-300"
                       >
-                        <Trash2 className="w-3 h-3" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </td>
@@ -215,91 +224,102 @@ export default function Reports() {
             })}
           </tbody>
         </table>
+        {!isLoading && filteredReports.length === 0 && (
+          <div className="py-24 text-center">
+            <p className="text-xs font-bold text-[#111111]/20 uppercase tracking-widest italic">No matching reports found</p>
+          </div>
+        )}
       </div>
 
       <AnimatePresence>
         {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsModalOpen(false)} className="absolute inset-0 bg-[#141414]/40 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-              className="relative w-full max-w-lg bg-[#E4E3E0] border border-[#141414] p-12 shadow-[24px_24px_0px_0px_#141414] max-h-[90vh] overflow-y-auto"
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsModalOpen(false)} className="absolute inset-0 bg-[#FBFBFA]/60 backdrop-blur-xl" />
+            <motion.div initial={{ opacity: 0, y: 30, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 30, scale: 0.98 }}
+              className="relative w-full max-w-xl bg-white border border-[#111111]/5 p-10 rounded-[2rem] shadow-[0_32px_64px_rgba(0,0,0,0.1)] max-h-[90vh] overflow-y-auto"
             >
-              <div className="flex justify-between items-center mb-8">
-                <h3 className="text-2xl font-black italic uppercase tracking-tighter">Calibration Record</h3>
-                <button onClick={() => { setIsModalOpen(false); setErrorMessage(null); }}><X className="w-6 h-6" /></button>
+              <div className="flex justify-between items-start mb-10">
+                <div>
+                  <h3 className="text-2xl font-extrabold tracking-tight text-[#111111]">Register Report</h3>
+                  <p className="text-xs font-medium text-[#111111]/40 mt-1 uppercase tracking-wider">Calibration Log Submission</p>
+                </div>
+                <button 
+                  onClick={() => { setIsModalOpen(false); setErrorMessage(null); }}
+                  className="w-10 h-10 rounded-full bg-[#111111]/5 flex items-center justify-center hover:bg-[#111111] hover:text-white transition-all duration-500"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
               {errorMessage && (
-                <div className="mb-6 p-4 bg-red-500 text-white text-xs font-mono uppercase tracking-widest break-words">
-                  ERROR: {errorMessage}
-                </div>
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mb-8 p-4 bg-red-50 border border-red-100 rounded-xl text-[11px] font-bold text-red-600 uppercase tracking-tight">
+                  {errorMessage}
+                </motion.div>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div>
-                  <label className="block text-[10px] font-mono font-bold uppercase tracking-widest mb-1">Company Name</label>
-                  <input 
-                    required
-                    className="w-full bg-white border border-[#141414] px-4 py-3 text-sm focus:outline-none"
-                    value={formData.companyName}
-                    onChange={e => setFormData({ ...formData, companyName: e.target.value })}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                   <div>
-                    <label className="block text-[10px] font-mono font-bold uppercase tracking-widest mb-1">Contact Person</label>
-                    <input 
-                      className="w-full bg-white border border-[#141414] px-4 py-3 text-sm focus:outline-none"
-                      value={formData.contactPerson}
-                      onChange={e => setFormData({ ...formData, contactPerson: e.target.value })}
-                    />
-                  </div>
+              <form onSubmit={handleSubmit} className="space-y-8">
+                <div className="space-y-6">
                   <div>
-                    <label className="block text-[10px] font-mono font-bold uppercase tracking-widest mb-1">Company Email</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-[#111111]/40 mb-3 ml-1">Company Name</label>
                     <input 
                       required
-                      type="email"
-                      className="w-full bg-white border border-[#141414] px-4 py-3 text-sm focus:outline-none"
-                      value={formData.companyEmail}
-                      onChange={e => setFormData({ ...formData, companyEmail: e.target.value })}
+                      placeholder="Enter company name"
+                      className="w-full bg-[#FBFBFA] border border-[#111111]/5 rounded-xl px-5 py-4 text-xs font-semibold focus:outline-none focus:border-[#111111]/20 transition-all placeholder:text-[#111111]/20"
+                      value={formData.companyName}
+                      onChange={e => setFormData({ ...formData, companyName: e.target.value })}
                     />
                   </div>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-mono font-bold uppercase tracking-widest mb-1">Instrument List</label>
-                  <textarea 
-                    required
-                    placeholder="Enter instrument names (e.g. Micrometer Pro X, Caliper v2...)"
-                    className="w-full bg-white border border-[#141414] px-4 py-3 text-sm focus:outline-none h-24"
-                    value={formData.instrumentList}
-                    onChange={e => setFormData({ ...formData, instrumentList: e.target.value })}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+                  
                   <div>
-                    <label className="block text-[10px] font-mono font-bold uppercase tracking-widest mb-1">Calibration Date</label>
+                    <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-[#111111]/40 mb-3 ml-1">Tag No. / ID</label>
                     <input 
                       required
-                      type="datetime-local" 
-                      className="w-full bg-white border border-[#141414] px-4 py-3 text-sm focus:outline-none"
-                      value={formData.calibrationDate}
-                      onChange={e => setFormData({ ...formData, calibrationDate: e.target.value })}
+                      placeholder="e.g. TAG-12345"
+                      className="w-full bg-[#FBFBFA] border border-[#111111]/5 rounded-xl px-5 py-4 text-xs font-semibold focus:outline-none focus:border-[#111111]/20 transition-all"
+                      value={formData.tagId}
+                      onChange={e => setFormData({ ...formData, tagId: e.target.value })}
                     />
                   </div>
+
                   <div>
-                    <label className="block text-[10px] font-mono font-bold uppercase tracking-widest mb-1">Expiry Date</label>
-                    <input 
-                      required
-                      type="datetime-local" 
-                      className="w-full bg-white border border-[#141414] px-4 py-3 text-sm focus:outline-none"
-                      value={formData.expiryDate}
-                      onChange={e => setFormData({ ...formData, expiryDate: e.target.value })}
+                    <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-[#111111]/40 mb-3 ml-1">Notes</label>
+                    <textarea 
+                      placeholder="Additional details..."
+                      className="w-full bg-[#FBFBFA] border border-[#111111]/5 rounded-xl px-5 py-4 text-xs font-semibold focus:outline-none focus:border-[#111111]/20 transition-all h-28 resize-none"
+                      value={formData.notes}
+                      onChange={e => setFormData({ ...formData, notes: e.target.value })}
                     />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-[#111111]/40 mb-3 ml-1">Calibration Date</label>
+                      <input 
+                        required
+                        type="datetime-local" 
+                        className="w-full bg-[#FBFBFA] border border-[#111111]/5 rounded-xl px-5 py-4 text-[11px] font-semibold focus:outline-none focus:border-[#111111]/20 transition-all"
+                        value={formData.calibrationDate}
+                        onChange={e => setFormData({ ...formData, calibrationDate: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-[0.15em] text-[#111111]/40 mb-3 ml-1">Due Date</label>
+                      <input 
+                        required
+                        type="datetime-local" 
+                        className="w-full bg-[#FBFBFA] border border-[#111111]/5 rounded-xl px-5 py-4 text-[11px] font-semibold focus:outline-none focus:border-[#111111]/20 transition-all"
+                        value={formData.expiryDate}
+                        onChange={e => setFormData({ ...formData, expiryDate: e.target.value })}
+                      />
+                    </div>
                   </div>
                 </div>
                 
-                <button type="submit" className="w-full flex items-center justify-center gap-3 bg-[#141414] text-[#E4E3E0] py-4 px-6 text-sm font-bold uppercase tracking-wider hover:invert transition-all">
-                  <Save className="w-4 h-4" /> Save Record
+                <button type="submit" className="w-full group relative overflow-hidden bg-[#111111] text-white py-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] hover:bg-[#222222] transition-all transform hover:scale-[1.01] active:scale-[0.98]">
+                  <span className="relative z-10 flex items-center justify-center gap-3">
+                    <Save className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100 transition-opacity" />
+                    Save Report Record
+                  </span>
                 </button>
               </form>
             </motion.div>

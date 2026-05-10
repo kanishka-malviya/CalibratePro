@@ -6,15 +6,14 @@
       "type": "object",
       "properties": {
         "companyName": { "type": "string" },
-        "companyEmail": { "type": "string", "format": "email" },
-        "contactPerson": { "type": "string" },
-        "instrumentList": { "type": "string", "description": "Comma separated or list of instruments" },
+        "tagId": { "type": "string", "description": "Tag Number or Unique ID" },
+        "notes": { "type": "string" },
         "calibrationDate": { "type": "string", "format": "date-time" },
         "expiryDate": { "type": "string", "format": "date-time" },
         "userId": { "type": "string" },
         "remindersSent": { "type": "array", "items": { "type": "string" } }
       },
-      "required": ["companyName", "companyEmail", "instrumentList", "calibrationDate", "expiryDate", "userId"]
+      "required": ["companyName", "tagId", "calibrationDate", "expiryDate", "userId"]
     }
   },
   "firestore": {
