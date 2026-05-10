@@ -1,15 +1,36 @@
 import { auth } from '../lib/firebase';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { Sparkles, LogIn } from 'lucide-react';
+import { Sparkles, LogIn, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useState } from 'react';
 
 export default function Login() {
+  const [error, setError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    setError(null);
+    setIsLoggingIn(true);
+    
     try {
       await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error('Login failed:', error);
+    } catch (err: any) {
+      console.error('Login failed:', err);
+      let message = 'Authentication failed.';
+      
+      if (err.code === 'auth/popup-closed-by-user') {
+        message = 'The login popup was closed before completing. Please try again.';
+      } else if (err.code === 'auth/unauthorized-domain') {
+        message = 'This domain is not authorized in Firebase. Please add this URL to the "Authorized Domains" list in your Firebase Console.';
+      } else if (err.message) {
+        message = err.message;
+      }
+      
+      setError(message);
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -39,12 +60,30 @@ export default function Login() {
               Access the centralized calibration registry and operational fleet management system.
             </p>
             
+            {error && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-red-50 border border-red-100 p-4 rounded-xl flex items-start gap-3"
+              >
+                <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-[10px] font-bold text-red-600 uppercase tracking-tight leading-normal">
+                  {error}
+                </p>
+              </motion.div>
+            )}
+            
             <button
               onClick={handleGoogleLogin}
-              className="w-full group relative flex items-center justify-center gap-3 bg-[#111111] text-white py-5 px-6 rounded-2xl text-[11px] font-black uppercase tracking-[0.15em] hover:bg-[#222222] transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-black/10"
+              disabled={isLoggingIn}
+              className="w-full group relative flex items-center justify-center gap-3 bg-[#111111] text-white py-5 px-6 rounded-2xl text-[11px] font-black uppercase tracking-[0.15em] hover:bg-[#222222] transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-black/10 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <LogIn className="w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity" />
-              Identify with Google
+              {isLoggingIn ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <LogIn className="w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity" />
+              )}
+              {isLoggingIn ? 'Verifying...' : 'Identify with Google'}
             </button>
           </div>
 
