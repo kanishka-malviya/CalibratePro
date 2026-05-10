@@ -1,10 +1,10 @@
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
-import localConfig from '../../firebase-applet-config.json';
+import localConfig from '@/firebase-applet-config.json';
 
 // Helper to safely get environment variables or fallback
-const getEnv = (key: string, fallback: string) => {
+const getEnv = (key: string, fallback: string | undefined): string => {
   const value = import.meta.env[key];
   if (typeof value === 'string') {
     const trimmed = value.trim();
@@ -12,7 +12,7 @@ const getEnv = (key: string, fallback: string) => {
       return trimmed;
     }
   }
-  return fallback;
+  return fallback || '';
 };
 
 const firebaseConfig = {
@@ -26,13 +26,18 @@ const firebaseConfig = {
   firestoreDatabaseId: getEnv('VITE_FIREBASE_DATABASE_ID', localConfig.firestoreDatabaseId),
 };
 
-// Debug log (Safe: only shows first/last 4 chars of API key to verify source)
-console.log(`Firebase Initializing... [Project: ${firebaseConfig.projectId}]`);
-if (firebaseConfig.apiKey) {
-  const keyMatch = firebaseConfig.apiKey === localConfig.apiKey ? 'local' : 'env';
-  console.log(`Using ${keyMatch} API Key: ${firebaseConfig.apiKey.substring(0, 4)}...${firebaseConfig.apiKey.substring(firebaseConfig.apiKey.length - 4)}`);
-} else {
-  console.error("FATAL: Firebase API Key is missing!");
+// Diagnostic Logging (Safe)
+if (process.env.NODE_ENV !== 'production') {
+  console.log('[Firebase Diagnostics]');
+  console.log(`- Project ID: ${firebaseConfig.projectId}`);
+  console.log(`- Auth Domain: ${firebaseConfig.authDomain}`);
+  if (firebaseConfig.apiKey) {
+    const isEnv = !!import.meta.env.VITE_FIREBASE_API_KEY;
+    console.log(`- API Key Source: ${isEnv ? 'Environment (VITE_FIREBASE_API_KEY)' : 'firebase-applet-config.json'}`);
+    console.log(`- API Key (Redacted): ${firebaseConfig.apiKey.substring(0, 6)}...${firebaseConfig.apiKey.substring(firebaseConfig.apiKey.length - 4)}`);
+  } else {
+    console.error('- API Key: MISSING');
+  }
 }
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
