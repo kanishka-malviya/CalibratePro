@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../lib/firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { 
   AlertCircle, 
@@ -32,44 +32,48 @@ export default function Dashboard() {
   async function loadData() {
     if (!auth.currentUser) return;
     
-    const reportsRef = collection(db, 'reports');
-    const q = query(reportsRef, where('userId', '==', auth.currentUser.uid));
-    const querySnapshot = await getDocs(q);
-    
-    const reports: Report[] = [];
-    querySnapshot.forEach((doc) => {
-      reports.push({ id: doc.id, ...doc.data() } as Report);
-    });
+    try {
+      const reportsRef = collection(db, 'reports');
+      const q = query(reportsRef, where('userId', '==', auth.currentUser.uid));
+      const querySnapshot = await getDocs(q);
+      
+      const reports: Report[] = [];
+      querySnapshot.forEach((doc) => {
+        reports.push({ id: doc.id, ...doc.data() } as Report);
+      });
 
-    const now = new Date();
-    const next7d = addDays(now, 7);
-    const next3d = addDays(now, 3);
+      const now = new Date();
+      const next7d = addDays(now, 7);
+      const next3d = addDays(now, 3);
 
-    const newStats = {
-      active: 0,
-      expiring7d: 0,
-      expiring3d: 0,
-      expired: 0
-    };
+      const newStats = {
+        active: 0,
+        expiring7d: 0,
+        expiring3d: 0,
+        expired: 0
+      };
 
-    reports.forEach(r => {
-      const expiry = r.expiryDate.toDate();
-      if (isBefore(expiry, now)) {
-        newStats.expired++;
-      } else if (isBefore(expiry, next3d)) {
-        newStats.expiring3d++;
-        newStats.active++;
-      } else if (isBefore(expiry, next7d)) {
-        newStats.expiring7d++;
-        newStats.active++;
-      } else {
-        newStats.active++;
-      }
-    });
+      reports.forEach(r => {
+        const expiry = r.expiryDate.toDate();
+        if (isBefore(expiry, now)) {
+          newStats.expired++;
+        } else if (isBefore(expiry, next3d)) {
+          newStats.expiring3d++;
+          newStats.active++;
+        } else if (isBefore(expiry, next7d)) {
+          newStats.expiring7d++;
+          newStats.active++;
+        } else {
+          newStats.active++;
+        }
+      });
 
-    setStats(newStats);
-    setAllReports(reports.sort((a, b) => a.expiryDate.seconds - b.expiryDate.seconds));
-    setIsLoading(false);
+      setStats(newStats);
+      setAllReports(reports.sort((a, b) => a.expiryDate.seconds - b.expiryDate.seconds));
+      setIsLoading(false);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'reports');
+    }
   }
 
   const elapsedRecords = allReports.filter(r => {

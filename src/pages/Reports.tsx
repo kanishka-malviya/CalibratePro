@@ -1,34 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../lib/firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc, Timestamp, orderBy } from 'firebase/firestore';
 import { ClipboardCheck, Plus, Trash2, Edit3, X, Save, Building, Microscope, User, Mail, Search } from 'lucide-react';
 import { Report } from '../types';
 import { format, differenceInDays } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
-
-enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-    },
-    operationType,
-    path
-  };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
 
 export default function Reports() {
   const [reports, setReports] = useState<Report[]>([]);
@@ -54,11 +30,15 @@ export default function Reports() {
     if (!auth.currentUser) return;
     const uid = auth.currentUser.uid;
 
-    const q = query(collection(db, 'reports'), where('userId', '==', uid), orderBy('expiryDate', 'asc'));
-    const reportsSnap = await getDocs(q);
+    try {
+      const q = query(collection(db, 'reports'), where('userId', '==', uid), orderBy('expiryDate', 'asc'));
+      const reportsSnap = await getDocs(q);
 
-    setReports(reportsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Report)));
-    setIsLoading(false);
+      setReports(reportsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Report)));
+      setIsLoading(false);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'reports');
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

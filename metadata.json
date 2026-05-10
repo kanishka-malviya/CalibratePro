@@ -1,6 +1,6 @@
 {
   "name": "CalibratePro",
-  "description": "Comprehensive calibration report management system with automated email alerts for upcoming recalibration deadlines.",
+  "description": "Simplified calibration registry and dashboard for tracking report deadlines.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }
